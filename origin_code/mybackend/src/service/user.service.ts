@@ -1,5 +1,5 @@
 import { Singleton, Init } from '@midwayjs/core';
-import Database from 'better-sqlite3';
+import * as Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 

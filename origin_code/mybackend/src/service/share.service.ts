@@ -1,5 +1,5 @@
 import { Provide, Init, Scope, ScopeEnum } from '@midwayjs/core';
-import Database from 'better-sqlite3';
+import * as Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -18,6 +18,7 @@ export class ShareService {
     
     const dbPath = path.join(dataDir, 'share.sqlite');
     console.log('[ShareService] 数据目录:', dataDir);
+    console.log('[ShareService] 数据库路径:', dbPath);
     this.db = new Database(dbPath);
     console.log('[ShareService] 数据库路径:', dbPath);
     // 启用外键约束
