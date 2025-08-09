@@ -17,10 +17,5 @@ export default {
         dir: 'public/assets',
       },
     }
-  },
-  cors: {
-    origin: '*', // 如果要限制来源可以写成 http://localhost:5173
-    allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH',
-    credentials: true, // 如果前端要发送 cookie
-  },
+  }
 } as MidwayConfig;

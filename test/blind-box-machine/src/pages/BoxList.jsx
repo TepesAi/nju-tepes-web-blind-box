@@ -19,6 +19,7 @@ export default function BoxList() {
     useEffect(() => {
         async function fetchBoxes() {
             try {
+                console.log("Fetching boxes from backend...");
                 const res = await fetch("http://localhost:7001/api/user/boxes");
                 const data = await res.json();
                 setBoxes(data);

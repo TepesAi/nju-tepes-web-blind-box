@@ -39,6 +39,7 @@ export class UserController {
   // 获取盲盒列表
   @Get('/boxes')
   async getAllBoxes() {
+    console.log('进入方法boxes');
     return this.userService.getAllBoxes();
   }
 

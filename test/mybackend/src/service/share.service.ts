@@ -1,109 +1,117 @@
-// src/service/share.service.ts
 import { Provide, Init, Scope, ScopeEnum } from '@midwayjs/core';
-import initSqlJs from 'sql.js';
+import Database from 'better-sqlite3';
 import * as fs from 'fs';
+import * as path from 'path';
 
 @Provide()
 @Scope(ScopeEnum.Singleton)
 export class ShareService {
-  db;
-  SQL;
+  private db: Database.Database;
 
   @Init()
   async init() {
-    this.SQL = await initSqlJs();
-    const dbPath = './share.sqlite';
-
-    if (fs.existsSync(dbPath)) {
-      const fileData = fs.readFileSync(dbPath);
-      this.db = new this.SQL.Database(fileData);
-    } else {
-      this.db = new this.SQL.Database();
-      this.db.run(`
-        CREATE TABLE IF NOT EXISTS shares (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user TEXT,
-          prize TEXT,
-          content TEXT,
-          time TEXT,
-          likes INTEGER DEFAULT 0
-        );
-
-        CREATE TABLE IF NOT EXISTS comments (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          shareId INTEGER,
-          user TEXT,
-          text TEXT,
-          time TEXT
-        );
-      `);
-      this.saveDB();
+    // 确保数据目录存在
+    const dataDir = path.resolve(__dirname, './data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
     }
+    
+    const dbPath = path.join(dataDir, 'share.sqlite');
+    console.log('[ShareService] 数据目录:', dataDir);
+    this.db = new Database(dbPath);
+    console.log('[ShareService] 数据库路径:', dbPath);
+    // 启用外键约束
+    this.db.pragma('foreign_keys = ON');
+    
+    // 创建表结构
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS shares (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user TEXT NOT NULL,
+        prize TEXT NOT NULL,
+        content TEXT NOT NULL,
+        time TEXT DEFAULT (datetime('now', 'localtime')),
+        likes INTEGER DEFAULT 0
+      );
+      
+      CREATE TABLE IF NOT EXISTS comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shareId INTEGER NOT NULL,
+        user TEXT NOT NULL,
+        text TEXT NOT NULL,
+        time TEXT DEFAULT (datetime('now', 'localtime')),
+        FOREIGN KEY(shareId) REFERENCES shares(id) ON DELETE CASCADE
+      );
+    `);
   }
 
-  saveDB() {
-    const data = this.db.export();
-    fs.writeFileSync('./share.sqlite', Buffer.from(data));
-  }
-
+  // 添加晒单
   async addShare({ user, prize, content }) {
-    const time = new Date().toLocaleString();
-    this.db.run(
-      'INSERT INTO shares (user, prize, content, time) VALUES (?, ?, ?, ?)',
-      [user, prize, content, time]
-    );
-    this.saveDB();
+    const insert = this.db.prepare(`
+      INSERT INTO shares (user, prize, content) 
+      VALUES (?, ?, ?)
+    `);
+    
+    insert.run(user, prize, content);
     return { success: true, msg: '晒单成功' };
   }
 
+  // 获取所有晒单
   async getShares() {
-    const stmt = this.db.prepare('SELECT * FROM shares ORDER BY time DESC');
-    const shares = [];
-    while (stmt.step()) {
-      shares.push(stmt.getAsObject());
-    }
-    stmt.free();
-
+    const shares = this.db.prepare(`
+      SELECT * FROM shares 
+      ORDER BY time DESC
+    `).all();
+    
     for (const share of shares) {
-      const commentStmt = this.db.prepare('SELECT * FROM comments WHERE shareId = ?');
-      commentStmt.bind([share.id]);
-      const comments = [];
-      while (commentStmt.step()) {
-        comments.push(commentStmt.getAsObject());
-      }
-      commentStmt.free();
+      const comments = this.db.prepare(`
+        SELECT * FROM comments 
+        WHERE shareId = ? 
+        ORDER BY time ASC
+      `).all(share.id);
+      
       share.comments = comments;
     }
-
+    
     return shares;
   }
 
+  // 删除晒单
   async deleteShare({ id, user }) {
-    const stmt = this.db.prepare('SELECT * FROM shares WHERE id = ?');
-    stmt.bind([id]);
-    const record = stmt.step() ? stmt.getAsObject() : null;
-    stmt.free();
-    if (!record || record.user !== user) return { success: false, msg: '无权限删除' };
-
-    this.db.run('DELETE FROM shares WHERE id = ?', [id]);
-    this.db.run('DELETE FROM comments WHERE shareId = ?', [id]);
-    this.saveDB();
-    return { success: true, msg: '删除成功' };
+    return this.db.transaction(() => {
+      // 检查权限
+      const share = this.db.prepare('SELECT * FROM shares WHERE id = ?').get(id);
+      if (!share || share.user !== user) {
+        return { success: false, msg: '无权限删除' };
+      }
+      
+      // 删除晒单及相关评论
+      this.db.prepare('DELETE FROM shares WHERE id = ?').run(id);
+      this.db.prepare('DELETE FROM comments WHERE shareId = ?').run(id);
+      
+      return { success: true, msg: '删除成功' };
+    })();
   }
 
+  // 添加评论
   async addComment({ shareId, user, text }) {
-    const time = new Date().toLocaleString();
-    this.db.run(
-      'INSERT INTO comments (shareId, user, text, time) VALUES (?, ?, ?, ?)',
-      [shareId, user, text, time]
-    );
-    this.saveDB();
+    const insert = this.db.prepare(`
+      INSERT INTO comments (shareId, user, text) 
+      VALUES (?, ?, ?)
+    `);
+    
+    insert.run(shareId, user, text);
     return { success: true, msg: '评论成功' };
   }
 
+  // 点赞晒单
   async likeShare({ id }) {
-    this.db.run('UPDATE shares SET likes = likes + 1 WHERE id = ?', [id]);
-    this.saveDB();
+    this.db.prepare(`
+      UPDATE shares 
+      SET likes = likes + 1 
+      WHERE id = ?
+    `).run(id);
+    
     return { success: true, msg: '点赞成功' };
   }
 }

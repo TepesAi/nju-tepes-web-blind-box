@@ -3,13 +3,15 @@ import * as koa from '@midwayjs/koa';
 import * as validate from '@midwayjs/validate';
 import * as info from '@midwayjs/info';
 //import { join } from 'path';
+import * as crossDomain from '@midwayjs/cross-domain';
 import { ReportMiddleware } from './middleware/report.middleware';
 import * as staticFile from '@midwayjs/static-file';
 import DefaultConfig from './config/config.default';
-const cors = require('@koa/cors'); // ✅ 修复写法
+
 
 @Configuration({
   imports: [
+    crossDomain,
     koa,
     validate,
     staticFile,
@@ -28,7 +30,6 @@ export class MainConfiguration {
   app: koa.Application;
 
   async onReady() {
-    this.app.use(cors()); // ✅ 启用 CORS 中间件
     this.app.useMiddleware([ReportMiddleware]);
   }
 }
